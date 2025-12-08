@@ -123,7 +123,7 @@ func (h *WalletHandler) CreateWallet(c *gin.Context) {
 		return
 	}
 	
-	w,err:= h.walletService.CreateWallet(c, req.UserID)
+	w,err:= h.walletService.CreateWallet(c.Request.Context(), req.UserID)
 		if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "failed to create wallet"})
 		return 

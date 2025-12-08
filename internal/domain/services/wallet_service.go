@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"time"
 	"walletapitest/internal/domain/entities"
 	"walletapitest/internal/domain/repositories"
 
@@ -31,23 +32,7 @@ func (s *WalletService) ProcessOperation(ctx context.Context, walletID uuid.UUID
 		return ErrInvalidAmount
 	}
 
-	// Начинаем транзакцию
-	tx, err := s.walletRepo.BeginTx(ctx)
-	if err != nil {
-		return err
-	}
-
-	// Откатываем транзакцию в случае ошибки
-	defer func() {
-		if err != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				// Логируем ошибку отката, но возвращаем исходную ошибку
-			}
-		}
-	}()
-
-	// Получаем кошелек с блокировкой строки (FOR UPDATE) для предотвращения race conditions
-	wallet, err := s.walletRepo.FindByIDWithTx(ctx, tx, walletID)
+	wallet, err := s.walletRepo.FindByID(ctx, walletID)
 	if err != nil {
 		return err
 	}
@@ -56,33 +41,21 @@ func (s *WalletService) ProcessOperation(ctx context.Context, walletID uuid.UUID
 		return ErrWalletNotFound
 	}
 
-	// Определяем изменение баланса в зависимости от типа операции
-	var balanceChange int64
 	switch operationType {
 	case entities.OperationTypeDeposit:
-		balanceChange = amount
+		wallet.Balance += amount
 	case entities.OperationTypeWithdraw:
-		// Проверяем достаточность средств
 		if wallet.Balance < amount {
 			return ErrInsufficientFunds
 		}
-		balanceChange = -amount // Отрицательное значение для снятия
+		wallet.Balance -= amount
 	default:
 		return ErrInvalidOperation
 	}
 
-	// Обновляем баланс в транзакции
-	err = s.walletRepo.UpdateBalanceWithTx(ctx, tx, walletID, balanceChange)
-	if err != nil {
-		return err
-	}
-
-	// Коммитим транзакцию
-	if err = tx.Commit(); err != nil {
-		return err
-	}
-
-	return nil
+	// Update timestamp
+	wallet.UpdatedAt = time.Now()
+	return s.walletRepo.Update(ctx, wallet)
 }
 
 func (s *WalletService) GetWallet(ctx context.Context, walletID uuid.UUID) (*entities.Wallet, error) {

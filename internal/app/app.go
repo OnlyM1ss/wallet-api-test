@@ -47,11 +47,15 @@ func (a *App) Run() error {
 
 	// Инициализация зависимостей
 	var userService *services.UserService
+	var walletService *services.WalletService
 	if a.db != nil {
 		// Инициализация репозиториев
 		userRepo := postgres.NewUserRepository(db)
+		walletRepo := postgres.NewWalletRepository(db)
+
 		// Инициализация сервисов
 		userService = services.NewUserService(userRepo)
+		walletService = services.NewWalletService(walletRepo)
 	} else {
 		// База данных обязательна для работы приложения
 		return err
@@ -59,9 +63,10 @@ func (a *App) Run() error {
 
 	// Инициализация хендлеров
 	userHandler := handlers.NewUserHandler(userService)
+	walletHandler := handlers.NewWalletHandler(walletService)
 
 	// Инициализация роутера
-	a.router = a.initRouter(userHandler)
+	a.router = a.initRouter(userHandler, walletHandler)
 
 	// Запуск сервера
 	srv := &http.Server{
@@ -99,13 +104,18 @@ func (a *App) Run() error {
 	return nil
 }
 
-func (a *App) initRouter(userHandler *handlers.UserHandler) *gin.Engine {
+func (a *App) initRouter(userHandler *handlers.UserHandler, walletHandler *handlers.WalletHandler) *gin.Engine {
 	router := gin.Default()
 
 	// Public routes
 	router.POST("/api/v1/users", userHandler.CreateUser)
 	router.POST("/api/v1/login", userHandler.Login)
 	router.GET("/api/v1/users/:id", userHandler.GetUser)
+
+	// Wallet routes
+	router.POST("/api/v1/wallet", walletHandler.ProcessOperation)
+	router.GET("/api/v1/wallet/:walletId", walletHandler.GetWallet)
+	router.POST("/api/v1/wallet/create", walletHandler.CreateWallet)
 
 	// Health check
 	router.GET("/health", func(c *gin.Context) {
@@ -147,6 +157,12 @@ func (a *App) initDB() (*sqlx.DB, error) {
 		return nil, err
 	}
 
+	// Создание таблицы wallets если её нет
+	if err := a.createWalletsTable(db); err != nil {
+		a.logger.Error("Failed to create wallets table", "error", err)
+		return nil, err
+	}
+
 	a.logger.Info("Database connection established")
 	return db, nil
 }
@@ -164,7 +180,25 @@ func (a *App) createUsersTable(db *sqlx.DB) error {
 		
 		CREATE INDEX IF NOT EXISTS idx_users_email ON users(email);
 	`
-	
+
+	_, err := db.Exec(query)
+	return err
+}
+
+func (a *App) createWalletsTable(db *sqlx.DB) error {
+	query := `
+		CREATE TABLE IF NOT EXISTS wallets (
+			id UUID PRIMARY KEY,
+			user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+			balance BIGINT NOT NULL DEFAULT 0,
+			created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+			updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		
+		CREATE INDEX IF NOT EXISTS idx_wallets_user_id ON wallets(user_id);
+		CREATE INDEX IF NOT EXISTS idx_wallets_id ON wallets(id);
+	`
+
 	_, err := db.Exec(query)
 	return err
 }

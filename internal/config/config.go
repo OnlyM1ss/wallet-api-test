@@ -45,10 +45,10 @@ func Load() (*Config, error) {
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath(".")
 	viper.AddConfigPath("./config")
-	
+
 	// Enable environment variables
 	viper.AutomaticEnv()
-	
+
 	// Set environment variable prefixes and bindings
 	viper.BindEnv("database.host", "DB_HOST")
 	viper.BindEnv("database.port", "DB_PORT")
@@ -56,25 +56,25 @@ func Load() (*Config, error) {
 	viper.BindEnv("database.password", "DB_PASSWORD")
 	viper.BindEnv("database.name", "DB_NAME")
 	viper.BindEnv("database.sslmode", "DB_SSLMODE")
-	
+
 	viper.BindEnv("redis.host", "REDIS_HOST")
 	viper.BindEnv("redis.port", "REDIS_PORT")
 	viper.BindEnv("redis.password", "REDIS_PASSWORD")
 	viper.BindEnv("redis.db", "REDIS_DB")
-	
+
 	viper.BindEnv("server.port", "SERVER_PORT")
 	viper.BindEnv("logLevel", "LOG_LEVEL")
-	
+
 	viper.SetDefault("server.port", "8080")
 	viper.SetDefault("logLevel", "info")
-	
+
 	// Read config file (optional - will use defaults/env vars if file doesn't exist)
 	viper.ReadInConfig() // Ignore error - config file is optional
-	
+
 	var cfg Config
 	if err := viper.Unmarshal(&cfg); err != nil {
 		return nil, err
 	}
-	
+
 	return &cfg, nil
 }

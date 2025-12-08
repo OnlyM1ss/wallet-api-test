@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-	"time"
 	"walletapitest/internal/domain/entities"
 	"walletapitest/internal/domain/repositories"
 
@@ -27,35 +26,31 @@ func NewWalletService(walletRepo repositories.WalletRepository) *WalletService {
 	}
 }
 
-func (s *WalletService) ProcessOperation(ctx context.Context, walletID uuid.UUID, operationType entities.OperationType, amount int64) error {
+func (s *WalletService) ProcessOperation(
+	ctx context.Context,
+	walletID uuid.UUID,
+	operationType entities.OperationType,
+	amount int64,
+) error {
 	if amount <= 0 {
 		return ErrInvalidAmount
 	}
 
-	wallet, err := s.walletRepo.FindByID(ctx, walletID)
+	err := s.walletRepo.ProcessOperationAtomic(ctx, walletID, operationType, amount)
+	
 	if err != nil {
+		switch err {
+		case ErrWalletNotFound:
+			return ErrWalletNotFound
+		case ErrInsufficientFunds:
+			return ErrInsufficientFunds
+		case ErrInvalidOperation:
+			return ErrInvalidOperation
+		}
 		return err
 	}
-
-	if wallet == nil {
-		return ErrWalletNotFound
-	}
-
-	switch operationType {
-	case entities.OperationTypeDeposit:
-		wallet.Balance += amount
-	case entities.OperationTypeWithdraw:
-		if wallet.Balance < amount {
-			return ErrInsufficientFunds
-		}
-		wallet.Balance -= amount
-	default:
-		return ErrInvalidOperation
-	}
-
-	// Update timestamp
-	wallet.UpdatedAt = time.Now()
-	return s.walletRepo.Update(ctx, wallet)
+	
+	return nil
 }
 
 func (s *WalletService) GetWallet(ctx context.Context, walletID uuid.UUID) (*entities.Wallet, error) {
